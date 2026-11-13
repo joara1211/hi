@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>수민이를 잡아보세요!</title>
+<style>
+  :root {
+    --sky: #8fd3ff;
+    --sky2: #d9f2ff;
+    --grass: #7ed957;
+    --ink: #2b2350;
+    --pop: #ff5c8a;
+    --sun: #ffd84d;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    color: var(--ink);
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  body {
+    background:
+      radial-gradient(circle at 85% 12%, var(--sun) 0 46px, transparent 48px),
+      linear-gradient(to bottom, var(--sky) 0%, var(--sky2) 72%, var(--grass) 72%, #5cc23a 100%);
+  }
+
+  /* 상단 HUD */
+  #hud {
+    position: fixed; inset: 0 0 auto 0; z-index: 5;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 0; text-align: center; pointer-events: none;
+  }
+  h1 {
+    margin: 0; font-size: clamp(22px, 6vw, 36px); letter-spacing: -0.5px;
+    text-shadow: 0 2px 0 #fff, 0 4px 0 rgba(43,35,80,.15);
+  }
+  #status { margin-top: 6px; font-size: clamp(14px, 3.8vw, 18px); }
+  #bar {
+    margin: 8px auto 0; width: min(320px, 78vw); height: 18px;
+    background: #fff; border: 3px solid var(--ink); border-radius: 99px; overflow: hidden;
+  }
+  #fill {
+    height: 100%; width: 100%; background: linear-gradient(90deg, #ff8fb1, var(--pop));
+    transition: width .25s ease;
+  }
+  #barLabel { margin-top: 3px; font-size: 12px; opacity: .75; }
+
+  /* 놀이터 */
+  #stage { position: fixed; inset: 0; }
+  #sumin {
+    position: absolute; left: 0; top: 0;
+    width: var(--w); aspect-ratio: 294 / 520;
+    transition: transform .2s cubic-bezier(.2, 1.4, .4, 1);
+    cursor: pointer; z-index: 3;
+    will-change: transform;
+  }
+  #sumin img {
+    width: 100%; height: 100%; display: block; pointer-events: none;
+    filter: drop-shadow(0 8px 0 rgba(43,35,80,.18));
+    animation: wobble 1.1s ease-in-out infinite alternate;
+    transform-origin: 50% 90%;
+  }
+  #sumin.tired img { animation-duration: .35s; }
+  #sumin.caught img { animation: caught .5s ease both; }
+  @keyframes wobble { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+  @keyframes caught {
+    0% { transform: scale(1) rotate(0); }
+    40% { transform: scale(1.25) rotate(-8deg); }
+    100% { transform: scale(1.1) rotate(0); }
+  }
+
+  /* 진화 연출 */
+  #sumin #princeImg {
+    position: absolute; top: 0; height: 100%;
+    width: calc(var(--w) * 381 / 294); left: calc(50% - var(--w) * 381 / 294 / 2);
+    display: none;
+  }
+  #sumin.showPrince #faceImg { visibility: hidden; }
+  #sumin.showPrince #princeImg { display: block; }
+  #sumin.shake img { animation: shake .12s linear infinite; }
+  #sumin.sil img {
+    filter: brightness(0) invert(1) drop-shadow(0 0 14px #fff) drop-shadow(0 0 28px #fff59d);
+  }
+  #sumin.evolved img { animation: hooray .5s ease-in-out infinite alternate; }
+  @keyframes shake {
+    0% { transform: translate(-4px, 0) rotate(-3deg); }
+    50% { transform: translate(4px, -2px) rotate(3deg); }
+    100% { transform: translate(-4px, 0) rotate(-3deg); }
+  }
+  @keyframes hooray {
+    from { transform: translateY(0) rotate(-4deg) scale(1.15); }
+    to   { transform: translateY(-14px) rotate(4deg) scale(1.15); }
+  }
+  #flash {
+    position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0;
+    background: radial-gradient(circle at 50% 55%, #fff 0%, #fff8c4 40%, #ffe066 100%);
+  }
+  #flash.pulse { animation: pulse .45s ease-in-out infinite alternate; }
+  #flash.boom { z-index: 6; animation: boom .9s ease-out forwards; }
+  @keyframes pulse { from { opacity: .15; } to { opacity: .7; } }
+  @keyframes boom { 0% { opacity: 1; } 35% { opacity: 1; } 100% { opacity: 0; } }
+  #evoText {
+    position: fixed; left: 0; right: 0; bottom: 9vh; z-index: 7; text-align: center;
+    padding: 0 12px; pointer-events: none;
+    font-size: clamp(26px, 8.5vw, 52px); color: #ff7a1a;
+    text-shadow: -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 3px 3px 0 #fff, 0 7px 0 var(--ink);
+    animation: pop .5s cubic-bezier(.2, 1.6, .4, 1) both;
+  }
+  #evoText[hidden] { display: none; }
+  @keyframes pop { from { transform: scale(0) rotate(-8deg); } to { transform: scale(1) rotate(0); } }
+
+  #bubble {
+    position: absolute; left: 50%; bottom: 100%;
+    transform: translate(-50%, 6px) scale(0); transform-origin: 50% 100%;
+    background: #fff; border: 3px solid var(--ink); border-radius: 18px;
+    padding: 6px 12px; white-space: nowrap; font-size: clamp(14px, 4vw, 18px);
+    transition: transform .15s ease; pointer-events: none;
+  }
+  #bubble.show { transform: translate(-50%, 6px) scale(1); }
+  #bubble::after {
+    content: ""; position: absolute; left: 50%; top: 100%; margin-left: -7px;
+    border: 7px solid transparent; border-top-color: var(--ink);
+  }
+
+  .puff {
+    position: absolute; z-index: 2; pointer-events: none; font-size: 28px;
+    animation: puff .5s ease-out forwards;
+  }
+  @keyframes puff {
+    from { opacity: 1; transform: translate(-50%, -50%) scale(.6); }
+    to   { opacity: 0; transform: translate(-50%, -90%) scale(1.6); }
+  }
+
+  /* 시작 / 결과 화면 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; display: grid; place-items: center;
+    background: rgba(43,35,80,.45); padding: 16px;
+  }
+  .overlay[hidden] { display: none; }
+  .card {
+    background: #fff; border: 4px solid var(--ink); border-radius: 26px;
+    padding: 22px 22px 20px; width: min(340px, 100%); text-align: center;
+    box-shadow: 0 8px 0 var(--ink);
+  }
+  .card img { width: 96px; display: block; margin: 0 auto 6px; }
+  .card h2 { margin: 0 0 6px; font-size: 26px; }
+  .card p { margin: 0 0 14px; font-size: 16px; line-height: 1.5; }
+  button {
+    font: inherit; font-size: 20px; color: #fff; background: var(--pop);
+    border: 3px solid var(--ink); border-radius: 99px; padding: 10px 28px;
+    box-shadow: 0 5px 0 var(--ink); cursor: pointer;
+  }
+  button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+
+  .confetti {
+    position: fixed; top: -40px; z-index: 11; pointer-events: none; font-size: 26px;
+    animation: fall linear forwards;
+  }
+  @keyframes fall { to { transform: translateY(115vh) rotate(540deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #sumin img { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <h1>수민이를 잡아보세요!</h1>
+  <div id="status">수민이를 터치해서 잡아봐요 👆</div>
+  <div id="bar"><div id="fill"></div></div>
+  <div id="barLabel">수민이 체력</div>
+</div>
+
+<div id="stage">
+  <div id="sumin">
+    <div id="bubble"></div>
+    <img id="faceImg" src="sumin.png" alt="수민이" draggable="false">
+    <img id="princeImg" src="prince.png" alt="꼴뚜기 왕자" draggable="false">
+  </div>
+</div>
+<div id="flash"></div>
+<div id="evoText" hidden>꼴뚜기 왕자가 되었다!!!!!</div>
+
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <img src="sumin.png" alt="">
+    <h2>수민이를 잡아라!</h2>
+    <p>수민이를 터치하면 쏙쏙 도망가요.<br>지칠 때까지 쫓아가서 잡아보세요!</p>
+    <button id="startBtn">시작!</button>
+  </div>
+</div>
+
+<div class="overlay" id="endScreen" hidden>
+  <div class="card">
+    <img src="prince.png" alt="">
+    <h2>잡았다! 🎉</h2>
+    <p id="result"></p>
+    <button id="againBtn">다시 하기</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const DODGES = 10;                       // 이만큼 피한 뒤에 잡혀줌
+  const TAUNTS = [
+    "메롱~ 😝", "여기지롱!", "못 잡겠지~", "느려 느려!", "히히 😆",
+    "어딜 봐요?", "아슬아슬!", "헉… 헉…", "조, 조금 힘들다…", "이제 못 뛰겠어… 🥵"
+  ];
+
+  const stage = document.getElementById("stage");
+  const sumin = document.getElementById("sumin");
+  const bubble = document.getElementById("bubble");
+  const statusEl = document.getElementById("status");
+  const fill = document.getElementById("fill");
+  const startScreen = document.getElementById("startScreen");
+  const endScreen = document.getElementById("endScreen");
+  const resultEl = document.getElementById("result");
+
+  let dodged = 0, misses = 0, startTime = 0, playing = false;
+  let pos = { x: 0, y: 0 }, bubbleTimer = 0, audio = null;
+
+  // ---- 소리 (외부 파일 없이 삑삑) ----
+  function beep(freq, dur = 0.09, type = "square") {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.08, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + dur);
+      o.connect(g).connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + dur);
+    } catch (e) { /* 소리가 안 나도 게임은 계속 */ }
+  }
+
+  // ---- 크기 / 위치 ----
+  function size() {
+    const w = Math.max(90, Math.min(170, window.innerWidth * 0.32, window.innerHeight * 0.2));
+    sumin.style.setProperty("--w", w + "px");
+    return { w, h: w * 520 / 294 };
+  }
+  function bounds() {
+    const { w, h } = size();
+    const top = document.getElementById("hud").offsetHeight + 56; // HUD + 말풍선 자리
+    return {
+      minX: 8, maxX: Math.max(8, window.innerWidth - w - 8),
+      minY: top, maxY: Math.max(top, window.innerHeight - h - 12), w, h
+    };
+  }
+  function place(x, y) {
+    pos = { x, y };
+    sumin.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  function center() {
+    const b = bounds();
+    place((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2);
+  }
+
+  // 지금 자리에서 충분히 먼 곳으로 도망
+  function runAway() {
+    const b = bounds();
+    const minDist = Math.min(window.innerWidth, window.innerHeight) * 0.35;
+    let best = null, bestD = -1;
+    for (let i = 0; i < 30; i++) {
+      const x = b.minX + Math.random() * (b.maxX - b.minX);
+      const y = b.minY + Math.random() * (b.maxY - b.minY);
+      const d = Math.hypot(x - pos.x, y - pos.y);
+      if (d > bestD) { bestD = d; best = { x, y }; }
+      if (d >= minDist) { best = { x, y }; break; }
+    }
+    place(best.x, best.y);
+  }
+
+  function say(text, ms = 1100) {
+    bubble.textContent = text;
+    bubble.classList.add("show");
+    clearTimeout(bubbleTimer);
+    if (ms) bubbleTimer = setTimeout(() => bubble.classList.remove("show"), ms);
+  }
+  function puff(x, y, emoji) {
+    const p = document.createElement("div");
+    p.className = "puff"; p.textContent = emoji;
+    p.style.left = x + "px"; p.style.top = y + "px";
+    stage.appendChild(p);
+    setTimeout(() => p.remove(), 500);
+  }
+
+  function updateHud() {
+    const left = DODGES - dodged;
+    fill.style.width = (left / DODGES * 100) + "%";
+    statusEl.textContent = left > 0
+      ? `수민이가 ${dodged}번 피했어요! (앞으로 ${left}번)`
+      : "수민이가 지쳤어요! 지금이야! 👉";
+  }
+
+  // ---- 게임 진행 ----
+  function start() {
+    dodged = 0; misses = 0; playing = true; startTime = performance.now();
+    sumin.classList.remove("tired", "caught", "showPrince", "evolved", "sil", "shake");
+    document.getElementById("evoText").hidden = true;
+    sumin.style.transitionDuration = "";
+    startScreen.hidden = true; endScreen.hidden = true;
+    statusEl.textContent = "수민이를 터치해서 잡아봐요 👆";
+    fill.style.width = "100%";
+    center();
+    say("나 잡아봐라~", 1400);
+    beep(660); setTimeout(() => beep(880), 110);
+  }
+
+  function onSuminTap(e) {
+    e.preventDefault(); e.stopPropagation();
+    if (!playing) return;
+
+    if (dodged < DODGES) {
+      // 피하기! 뒤로 갈수록 지쳐서 조금씩 느려짐
+      puff(e.clientX, e.clientY, "💨");
+      sumin.style.transitionDuration = (0.16 + dodged * 0.03) + "s";
+      runAway();
+      say(TAUNTS[dodged]);
+      dodged++;
+      if (dodged >= DODGES - 3) sumin.classList.add("tired");
+      beep(500 + dodged * 45);
+      updateHud();
+    } else {
+      caught();
+    }
+  }
+
+  function caught() {
+    playing = false;
+    const secs = ((performance.now() - startTime) / 1000).toFixed(1);
+    sumin.classList.remove("tired");
+    sumin.classList.add("caught");
+    statusEl.textContent = "잡았다!!! 🎉";
+    resultEl.innerHTML =
+      `<b>${secs}초</b> 만에 수민이를 잡았어요!<br>그런데 수민이는…<br><b>꼴뚜기 왕자</b>가 되었다!!!!!`;
+    evolve();
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // 잡힌 뒤: 아… 잡혀버렸다… → 어 내 몸이?! → 번쩍번쩍 → 꼴뚜기 왕자!
+  async function evolve() {
+    const flash = document.getElementById("flash");
+    const evoText = document.getElementById("evoText");
+
+    say("아… 잡혀버렸다… 😭", 0);
+    beep(330, 0.25, "triangle");
+    await sleep(600);
+    sumin.style.transitionDuration = ".6s";
+    center();
+    await sleep(1300);
+
+    say("어? 근데 내 몸이 왜 이러지…!!???", 0);
+    sumin.classList.remove("caught");
+    sumin.classList.add("shake");
+    statusEl.textContent = "어…? 수민이의 상태가…!";
+    beep(220, 0.2, "sawtooth");
+    await sleep(1600);
+
+    // 번쩍번쩍: 하얀 실루엣이 수민이 ↔ 꼴뚜기 왕자로 점점 빠르게 바뀜
+    bubble.classList.remove("show");
+    sumin.classList.add("sil");
+    if (!calm) flash.classList.add("pulse");
+    let gap = 420;
+    for (let i = 0; i < 16; i++) {
+      sumin.classList.toggle("showPrince");
+      beep(400 + i * 50, 0.07);
+      await sleep(calm ? 300 : gap);
+      gap = Math.max(110, gap * 0.87);
+    }
+
+    // 펑! 진화 완료
+    flash.classList.remove("pulse");
+    flash.classList.add("boom");
+    sumin.classList.add("showPrince", "evolved");
+    sumin.classList.remove("sil", "shake");
+    await sleep(350);
+    evoText.hidden = false;
+    statusEl.textContent = "수민이는 꼴뚜기 왕자로 진화했다!";
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) =>
+      setTimeout(() => beep(f, 0.18, "triangle"), i * 130));
+    confetti();
+    await sleep(3200);
+    flash.classList.remove("boom");
+    endScreen.hidden = false;
+  }
+
+  function confetti() {
+    const bits = ["🎉", "⭐", "🎈", "💖", "✨", "🍭"];
+    for (let i = 0; i < 36; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.textContent = bits[i % bits.length];
+      c.style.left = Math.random() * 100 + "vw";
+      c.style.animationDuration = (1.6 + Math.random() * 1.8) + "s";
+      c.style.animationDelay = (Math.random() * 0.6) + "s";
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 4500);
+    }
+  }
+
+  sumin.addEventListener("pointerdown", onSuminTap);
+  stage.addEventListener("pointerdown", (e) => {
+    if (!playing) return;
+    misses++;
+    puff(e.clientX, e.clientY, "❌");
+    beep(180, 0.06, "sawtooth");
+  });
+  document.getElementById("startBtn").addEventListener("click", start);
+  document.getElementById("againBtn").addEventListener("click", start);
+  window.addEventListener("resize", () => {
+    const b = bounds();
+    place(Math.min(Math.max(pos.x, b.minX), b.maxX), Math.min(Math.max(pos.y, b.minY), b.maxY));
+  });
+
+  center();
+})();
+</script>
+</body>
+</html>
